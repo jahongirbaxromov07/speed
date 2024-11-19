@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Speed Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(to bottom, #66ccff, #ffccff);
+            text-align: center;
+            padding: 50px;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            color: #333;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 20px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .result {
+            font-size: 1.5rem;
+            color: #333;
+            margin-top: 20px;
+        }
+
+        .info {
+            font-size: 1.2rem;
+            color: #666;
+            margin-top: 10px;
+        }
+
+        .highlight {
+            color: #000;
+            font-weight: bold;
+        }
+
+        .error {
+            color: red;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>GPS Speed Tracker</h1>
+    <div class="container">
+        <button id="startBtn">Start Running</button>
+        <button id="stopBtn" style="display: none;">Stop Running</button>
+        <div class="result" id="result">
+            <p>Press "Start Running" to begin tracking your run.</p>
+        </div>
+        <div class="info" id="info"></div>
+        <div class="error" id="error"></div>
+    </div>
+
+    <script>
+        let watchID;
+        let startTime, endTime;
+        let startCoords, endCoords;
+        let totalDistance = 0; // in meters
+        let isRunning = false;
+        let lastUpdateTime = 0;
+
+        // Button references
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const resultDiv = document.getElementById('result');
+        const infoDiv = document.getElementById('info');
+        const errorDiv = document.getElementById('error');
+
+        // Event listeners for buttons
+        startBtn.addEventListener('click', startRunning);
+        stopBtn.addEventListener('click', stopRunning);
+
+        // Function to start running (track time and location)
+        function startRunning() {
+            if (!navigator.geolocation) {
+                errorDiv.textContent = "Geolocation is not supported by your browser.";
+                return;
+            }
+
+            isRunning = true;
+            totalDistance = 0; // Reset distance
+            startTime = new Date();
+            resultDiv.innerHTML = `<p>Running... Keep going!</p>`;
+            infoDiv.innerHTML = `<p>Speed: <span class="highlight">0</span> m/s</p>`;
+            errorDiv.innerHTML = '';
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+
+            // Start watching the user's location
+            watchID = navigator.geolocation.watchPosition(updatePosition, showError, {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 10000
+            });
+        }
+
+        // Function to stop running (calculate time, speed, and distance)
+        function stopRunning() {
+            if (!isRunning) return;
+
+            isRunning = false;
+            endTime = new Date();
+
+            // Stop watching the user's location
+            navigator.geolocation.clearWatch(watchID);
+
+            const timeElapsed = (endTime - startTime) / 1000; // Time in seconds
+            const speed = totalDistance / timeElapsed; // Speed in meters per second
+            const timeFormatted = formatTime(timeElapsed);
+
+            resultDiv.innerHTML = `
+                <p>Well done! You finished your run.</p>
+                <p>Total Time: <span class="highlight">${timeFormatted}</span></p>
+                <p>Your Speed: <span class="highlight">${speed.toFixed(2)} meters/second</span></p>
+                <p>Distance: <span class="highlight">${totalDistance.toFixed(2)} meters</span></p>
+            `;
+
+            infoDiv.innerHTML = '';
+            startBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+        }
+
+        // Function to update position and calculate distance and speed
+        function updatePosition(position) {
+            const currentCoords = position.coords;
+            const currentTime = new Date();
+
+            if (startCoords) {
+                const distance = calculateDistance(startCoords, currentCoords);
+                totalDistance += distance;
+                const timeElapsed = (currentTime - lastUpdateTime) / 1000; // Time in seconds
+                const speed = distance / timeElapsed; // Speed in meters per second
+
+                infoDiv.innerHTML = `<p>Speed: <span class="highlight">${speed.toFixed(2)}</span> m/s</p>`;
+            }
+
+            startCoords = currentCoords;
+            lastUpdateTime = currentTime;
+        }
+
+        // Function to calculate the distance between two GPS coordinates (in meters)
+        function calculateDistance(coord1, coord2) {
+            const lat1 = coord1.latitude;
+            const lon1 = coord1.longitude;
+            const lat2 = coord2.latitude;
+            const lon2 = coord2.longitude;
+
+            const R = 6371000; // Earth radius in meters
+            const phi1 = lat1 * Math.PI / 180;
+            const phi2 = lat2 * Math.PI / 180;
+            const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+            const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+            const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                Math.cos(phi1) * Math.cos(phi2) *
+                Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            return R * c; // returns the distance in meters
+        }
+
+        // Function to handle geolocation errors
+        function showError(error) {
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    errorDiv.textContent = "User denied the request for Geolocation.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorDiv.textContent = "Location information is unavailable.";
+                    break;
+                case error.TIMEOUT:
+                    errorDiv.textContent = "The request to get user location timed out.";
+                    break;
+                case error.UNKNOWN_ERROR:
+                    errorDiv.textContent = "An unknown error occurred.";
+                    break;
+            }
+        }
+
+        // Function to format time into HH:MM:SS
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const remainingMinutes = minutes % 60;
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${hours}:${remainingMinutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+    </script>
+</body>
+
+</html>
